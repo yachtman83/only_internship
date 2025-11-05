@@ -12,8 +12,10 @@ if (!defined("B_PROLOG_INCLUDED") || B_PROLOG_INCLUDED !== true) die();
             <div class="contact-form__head-text"><?=$arResult['FORM_DESCRIPTION']?></div>
         <?php endif; ?>
     </div>
-
-    <form class="contact-form__form" action="/" method="POST">
+    
+    <? if ($arResult["isFormErrors"] == "Y"): ?><?= $arResult["FORM_ERRORS_TEXT"]; ?><? endif; ?>
+    
+    <?= str_replace('<form', '<form class="contact-form__form"', $arResult["FORM_HEADER"]) ?>
         
         <div class="contact-form__form-inputs">
             <div class="input contact-form__input">
@@ -21,6 +23,7 @@ if (!defined("B_PROLOG_INCLUDED") || B_PROLOG_INCLUDED !== true) die();
                     <div class="input__label-text">
                         <?= $arResult["QUESTIONS"]["medicine_name"]["CAPTION"] ?>
                         <? if ($arResult["QUESTIONS"]["medicine_name"]["REQUIRED"] == "Y"): ?><?= $arResult["REQUIRED_SIGN"]; ?><? endif; ?>
+                            
                     </div>
                     <?= str_replace('<input', '<input class="input__input"', $arResult["QUESTIONS"]["medicine_name"]["HTML_CODE"]) ?>
                     <div class="input__notification">Поле должно содержать не менее 3-х символов</div>
@@ -35,7 +38,7 @@ if (!defined("B_PROLOG_INCLUDED") || B_PROLOG_INCLUDED !== true) die();
                 </div>
                 <?= str_replace('<input', '<input class="input__input"', $arResult["QUESTIONS"]["medicine_company"]["HTML_CODE"]) ?>
                 <div class="input__notification">Поле должно содержать не менее 3-х символов</div>
-            </label>
+                </label>
         </div>
 
         <div class="input contact-form__input">
@@ -71,18 +74,19 @@ if (!defined("B_PROLOG_INCLUDED") || B_PROLOG_INCLUDED !== true) die();
                 </label>
             </div>
         </div>
+            
         <div class="contact-form__bottom">
             <div class="contact-form__bottom-policy">Нажимая &laquo;Отправить&raquo;, Вы&nbsp;подтверждаете, что
                 ознакомлены, полностью согласны и&nbsp;принимаете условия &laquo;Согласия на&nbsp;обработку персональных
                 данных&raquo;.
             </div>
-            <button class="form-button contact-form__bottom-button" data-success="Отправлено"
-                    data-error="Ошибка отправки">
-                <div class="form-button__title">Оставить заявку</div>
-            </button>
+        <button type="submit" name="web_form_submit" value="Оставить заявку" class="form-button contact-form__bottom-button">
+            <div class="form-button__title">Оставить заявку</div>
+        </button>
+
+
         </div>
-    </form>
+    <?= $arResult["FORM_FOOTER"] ?>
 </div>
 
-   
-<?= $arResult["FORM_FOOTER"] ?>
+
