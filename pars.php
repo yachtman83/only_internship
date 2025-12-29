@@ -1,22 +1,63 @@
-
 <?php
-require_once($_SERVER["DOCUMENT_ROOT"] . "/bitrix/modules/main/include/prolog_before.php");
-\Bitrix\Main\Loader::includeModule("iblock");
+function convertToId($pCode, $pKey, $IBLOCK_ID) 
+{
+    static $pCache = [];
 
-$isHeaderRow = true;
-$IBLOCK_ID = 5;
-$element = new CIBlockElement;
+    if (!isset($pCache[$pCode])) {
+        $rsEnum = CIBlockPropertyEnum::GetList([], ["CODE" => $pCode, "IBLOCK_ID" => $IBLOCK_ID]);
+        while ($arEnum = $rsEnum->Fetch()) {
+            $pCache[$pCode][normalize($arEnum["VALUE"])] = $arEnum["ID"];
+        }
+    }
 
-function readCSV($data, $IBLOCK_ID) {
-    $elementData = [
+    if ($pCode === "LOCATION") {
+        foreach ($pCache["LOCATION"] as $iblockValue => $id) {
+            if (mb_stripos($iblockValue, $pKey) !== false) {
+                return $id;
+            }
+        }
+    }
+    else {
+        return $pCache[$pCode][$pKey] ?? null;
+    }
+}
+
+function normalize(string $value)
+{
+    $value = str_replace("\xC2\xA0", ' ', $value);
+    $value = str_replace(["\r\n", "\n", "\r"], ' ', $value);
+    $value = preg_replace('/\s+/u', ' ', $value);
+
+    return mb_strtolower(trim($value), 'UTF-8');
+}
+
+function dataChange($pValue, &$map) 
+{
+    if(isset($map[$pValue])) {
+        return $map[$pValue];
+    }
+    return $pValue;
+}
+
+function parseCsv($data, $IBLOCK_ID, &$typeJ) 
+{
+    $elementArr = [
+        "ACTIVITY" => convertToId("ACTIVITY", normalize(dataChange($data[9], $typeJ)), $IBLOCK_ID),
+        "FIELD" => convertToId("FIELD", normalize($data[11]), $IBLOCK_ID),
+        "OFFICE" => convertToId("OFFICE", normalize($data[1]), $IBLOCK_ID),
+        "LOCATION" => convertToId("LOCATION", normalize($data[2]), $IBLOCK_ID),
         "REQUIRE" => $data[4],
         "DUTY" => $data[5],
         "CONDITIONS" => $data[6],
         "EMAIL" => $data[12],
         "DATE" => date("d.m.Y"),
+        "TYPE" => convertToId("TYPE", normalize($data[8]), $IBLOCK_ID),
+        "SALARY_TYPE" => "",
+        "SALARY_VALUE" => normalize($data[7]),
+        "SCHEDULE" => convertToId("SCHEDULE", normalize($data[10]), $IBLOCK_ID)
     ];
     
-    foreach ($elementData as $key => &$value) {
+    foreach ($elementArr as $key => &$value) {
         $value = trim($value);
         $value = str_replace("\n", "", $value);
         
@@ -27,41 +68,53 @@ function readCSV($data, $IBLOCK_ID) {
         }
     }
     
-    if (in_array($elementData["SALARY_VALUE"], ["-", ""])) {
-        $elementData["SALARY_VALUE"] = "";
-    } elseif ($elementData["SALARY_VALUE"] === "по договоренности") {
-        $elementData["SALARY_VALUE"] = "";
-        $elementData["SALARY_TYPE"] = "Договорная";
+    if (in_array($elementArr["SALARY_VALUE"], ["-", ""])) {
+        $elementArr["SALARY_VALUE"] = "";
+    } elseif ($elementArr["SALARY_VALUE"] === "по договоренности") {
+        $elementArr["SALARY_VALUE"] = "";
+        $elementArr["SALARY_TYPE"] = "договорная";
     } else {
-        $arSalary = explode(" ", $elementData["SALARY_VALUE"]);
+        $arSalary = explode(" ", $elementArr["SALARY_VALUE"]);
         
         if (in_array($arSalary[0], ["от", "до"])) {
-            $elementData["SALARY_TYPE"] = strtoupper($arSalary[0]);
+            $elementArr["SALARY_TYPE"] = $arSalary[0];
             array_shift($arSalary);
-            $elementData["SALARY_VALUE"] = implode(" ", $arSalary);
+            $elementArr["SALARY_VALUE"] = implode(" ", $arSalary);
         } else {
-            $elementData["SALARY_TYPE"] = "=";
+            $elementArr["SALARY_TYPE"] = "=";
         }
-    } 
-    return $elementData;
+    }
+    
+    $elementArr["SALARY_TYPE"] = convertToId("SALARY_TYPE", normalize($elementArr["SALARY_TYPE"]), $IBLOCK_ID);
+    
+    return $elementArr;
 }
 
+require_once($_SERVER["DOCUMENT_ROOT"] . "/bitrix/modules/main/include/prolog_before.php");
+\Bitrix\Main\Loader::includeModule("iblock");
 
 
+$typeJ = [
+    "Проектная/Временная работа" => "Временная занятость"  
+];
+
+$isHeader = true;
+$IBLOCK_ID = 5;
+$element = new CIBlockElement;
 
 if (($handle = fopen("vacancy.csv", "r")) !== false) {
     while (($data = fgetcsv($handle, 1000, ",")) !== false) {
-        if ($isHeaderRow) {
-            $isHeaderRow = false;
+        if ($isHeader) {
+            $isHeader = false;
             continue;
         }
         
-        $elementData = readCSV($data, $IBLOCK_ID);
-        $arLoadProductArray = [
+        $elementArr = parseCsv($data, $IBLOCK_ID, $typeJ);
+        $arLoadProductArray  = [
             "MODIFIED_BY" => $USER->GetID(),
             "IBLOCK_SECTION_ID" => false,
             "IBLOCK_ID" => $IBLOCK_ID,
-            "PROPERTY_VALUES" => $elementData,
+            "PROPERTY_VALUES" => $elementArr,
             "NAME" => $data[3],
             "ACTIVE" => end($data) ? "Y" : "N",
         ];
@@ -70,7 +123,7 @@ if (($handle = fopen("vacancy.csv", "r")) !== false) {
             echo "Добавлен элемент с ID : " . $PRODUCT_ID . "<br>";
         } 
         else {
-            echo "Error: " . $element->LAST_ERROR . "<br>";
+            echo "Ошибка: " . $element->LAST_ERROR . "<br>";
         }
     }
     fclose($handle);
